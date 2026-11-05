@@ -54,6 +54,12 @@ writes the profile to the toolchain's `out/games/`. It needs:
 
 The recipe format is the toolchain's `RECIPE_FORMAT_DRAFT.md`.
 
+On GitHub, `.github/workflows/profile.yml` builds it on Linux. It uses the XDroid360 commit
+and the toolchain release pinned in `android/profile/build-inputs.json`, and gets their
+sources with `scripts/fetch_build_sources.py` and `scripts/patch_xenonrecomp.py`. A tag
+`profile-sod-<n>` publishes the release that XDroid360 pins by sha256:
+`xdroid360-profile-sod-<n>.zip`, `recipe.json` and `SHA256SUMS`.
+
 ## Licences
 
 MIT (`LICENSE`), like DAORecomp. The profile's `licenses/INDEX.md` lists every third-party

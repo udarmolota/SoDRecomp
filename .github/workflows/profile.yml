@@ -1,0 +1,128 @@
+name: Game profile
+
+# Builds State of Decay's game profile for the XDroid360 launcher on Linux, with no game: the
+# runtime and front end built with XDROID360_PROFILE_BUILD against the committed profile
+# inputs (android/profile/inputs), the XDroid360 commit and the toolchain release pinned in
+# android/profile/build-inputs.json. A tag profile-sod-<n> (matching recipe.json's version,
+# sod-<n>) publishes a release with:
+#   xdroid360-profile-sod-<n>.zip  the profile (recipe.json, libsod-game.a, libsod-deps.a,
+#                                  include/, xr/, licenses/)
+#   recipe.json                    loose
+#   SHA256SUMS                     sha256sum of the others
+# Other pushes build the same and keep it as a workflow artifact.
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'profile-sod-*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CMAKE: cmake
+      NINJA: ninja
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Read the pinned inputs
+        id: pins
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json
+          p = json.load(open("android/profile/build-inputs.json"))
+          for key, value in (("xdroid360_repo", p["xdroid360"]["repo"]), ("xdroid360_commit", p["xdroid360"]["commit"]),
+                             ("toolchain_repo", p["toolchain"]["repo"]), ("toolchain_tag", p["toolchain"]["tag"]),
+                             ("kit_asset", p["toolchain"]["kit_asset"]), ("kit_sha256", p["toolchain"]["kit_sha256"])):
+              print(f"{key}={value}")
+          EOF
+
+      - name: Checkout XDroid360
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.pins.outputs.xdroid360_repo }}
+          ref: ${{ steps.pins.outputs.xdroid360_commit }}
+          path: _deps/XDroid360
+          submodules: true
+
+      - name: Checkout the toolchain
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.pins.outputs.toolchain_repo }}
+          ref: ${{ steps.pins.outputs.toolchain_tag }}
+          path: _deps/toolchain
+
+      - name: Install Ninja
+        run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build
+
+      - name: Install NDK 27.3.13750724
+        run: |
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;27.3.13750724" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.3.13750724" >> "$GITHUB_ENV"
+
+      - name: Fetch the build's sources
+        env:
+          XDROID360_ROOT: ${{ github.workspace }}/_deps/XDroid360
+        run: python3 -I scripts/fetch_build_sources.py
+
+      - name: Patch XenonRecomp
+        env:
+          XDROID360_ROOT: ${{ github.workspace }}/_deps/XDroid360
+        run: python3 -I scripts/patch_xenonrecomp.py
+
+      - name: Fetch the kit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KIT_SHA256: ${{ steps.pins.outputs.kit_sha256 }}
+        run: |
+          test -n "$KIT_SHA256" || { echo "android/profile/build-inputs.json has no kit_sha256"; exit 1; }
+          gh release download "${{ steps.pins.outputs.toolchain_tag }}" -R "${{ steps.pins.outputs.toolchain_repo }}" \
+            -p "${{ steps.pins.outputs.kit_asset }}" -D _deps
+          echo "$KIT_SHA256  _deps/${{ steps.pins.outputs.kit_asset }}" | sha256sum -c -
+          mkdir -p _deps/toolchain/out/kit
+          unzip -q "_deps/${{ steps.pins.outputs.kit_asset }}" -d _deps/toolchain/out/kit
+
+      - name: Build the profile
+        env:
+          XDROID360_ROOT: ${{ github.workspace }}/_deps/XDroid360
+          TOOLCHAIN: ${{ github.workspace }}/_deps/toolchain
+          XR_SRC: ${{ github.workspace }}/XenonRecomp
+          SDL_SRC: ${{ github.workspace }}/SoDRecomp/thirdparty/SDL
+        run: |
+          bash scripts/make_profile.sh
+          VERSION=$(python3 -c 'import json;print(json.load(open("_deps/toolchain/out/games/sod/recipe.json"))["version"])')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          mkdir -p dist
+          cp _deps/toolchain/out/games/sod.zip "dist/xdroid360-profile-$VERSION.zip"
+          cp _deps/toolchain/out/games/sod/recipe.json dist/recipe.json
+          (cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-${{ env.VERSION }}-${{ github.sha }}
+          path: dist/
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/profile-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF_NAME" = "profile-$VERSION" ||
+            { echo "tag $GITHUB_REF_NAME doesn't match recipe.json's version $VERSION"; exit 1; }
+          cat > notes.md <<EOF
+          State of Decay's game profile $VERSION for the XDroid360 launcher, built by this workflow with no game:
+          against ${{ steps.pins.outputs.xdroid360_repo }}@${{ steps.pins.outputs.xdroid360_commit }} and
+          ${{ steps.pins.outputs.toolchain_repo }} ${{ steps.pins.outputs.toolchain_tag }} (kit sha256 ${{ steps.pins.outputs.kit_sha256 }}).
+          licenses/INDEX.md in the zip lists every component it carries, with its licence and source.
+
+          Verify the assets with SHA256SUMS.
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md

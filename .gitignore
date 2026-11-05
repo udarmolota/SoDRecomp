@@ -6,6 +6,7 @@
 !/.gitignore
 !/.gitattributes
 !/.gitmodules
+!/.github/
 !/LICENSE
 !/README.md
 !/SoDRecomp/
