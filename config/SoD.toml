@@ -1,0 +1,118 @@
+# XenonRecomp config for State of Decay (X360 XBLA, title 584111E8, XDK 2.0.21173), base
+# default.xex (build of Jun 19 2013). Modeled on DAORecomp's config/DAO.toml.
+# Run from this folder (XenonRecomp prefixes the config's directory to the paths below).
+[main]
+file_path = "../extracted/game/default.xex"
+out_directory_path = "../ppc"
+switch_table_file_path = "SoD_switch_tables.toml"
+
+# Optimizations stay off until the recompilation runs correctly (as DAO).
+skip_lr = false
+skip_msr = false
+ctr_as_local = false
+xer_as_local = false
+reserved_as_local = false
+cr_as_local = false
+non_argument_as_local = false
+non_volatile_as_local = false
+
+# AUTO-FUNCTIONS (scripts/fix_functions.py)
+functions = [
+    { address = 0x82281570, size = 0x154 },
+    { address = 0x82388D58, size = 0xF0 },
+    { address = 0x8249F5B8, size = 0x74 },
+    { address = 0x82677E38, size = 0xB4 },
+    { address = 0x827DC6D0, size = 0xE0 },
+    { address = 0x8281E9B8, size = 0x108 },
+    { address = 0x8284E2E0, size = 0xB8 },
+    { address = 0x82A60DB0, size = 0x4D0 },
+    { address = 0x82B1F870, size = 0x108 },
+    { address = 0x82BBCC18, size = 0x9C },
+    { address = 0x82D9B0F0, size = 0x114 },
+    { address = 0x82E27F10, size = 0x188 },
+    { address = 0x82EE1EF0, size = 0x3F8 },
+    { address = 0x82EE26D8, size = 0x1D0 },
+    { address = 0x82F64B10, size = 0x2E8 },
+    { address = 0x82F9C660, size = 0x8C },
+    { address = 0x82FB8570, size = 0x4BC },
+    { address = 0x82FB9348, size = 0xB0 },
+    { address = 0x82FD3508, size = 0x4BC },
+    { address = 0x82FD52C0, size = 0x4BC },
+    { address = 0x82FD6040, size = 0x4BC },
+    { address = 0x82FD6FE8, size = 0x4BC },
+    { address = 0x82FD94B0, size = 0x4BC },
+    { address = 0x82FDB168, size = 0x4BC },
+    { address = 0x82FE5E90, size = 0x4BC },
+    { address = 0x82FE7318, size = 0x3E8 },
+    { address = 0x82FE7700, size = 0x62C },
+    { address = 0x830026F0, size = 0x4BC },
+    { address = 0x83002EC8, size = 0x4BC },
+    { address = 0x83003890, size = 0x4BC },
+    { address = 0x830040D0, size = 0x4BC },
+    { address = 0x830286A0, size = 0xF4 },
+    { address = 0x83090FB8, size = 0x154 },
+    { address = 0x8309CB90, size = 0xEC },
+    { address = 0x830C21B8, size = 0x9C },
+    { address = 0x830F0428, size = 0x2A4 },
+    { address = 0x8311F538, size = 0x104 },
+    { address = 0x8311F700, size = 0x274 },
+    { address = 0x83121018, size = 0x1EC },
+    { address = 0x8313FE30, size = 0x140 },
+    { address = 0x83142E30, size = 0x248 },
+    { address = 0x831448A0, size = 0x810 },
+    { address = 0x83159380, size = 0x1C8 },
+    { address = 0x83198678, size = 0x150 },
+    { address = 0x831987C8, size = 0x154 },
+    { address = 0x831E0278, size = 0x160 },
+    { address = 0x8322CE30, size = 0x198 },
+    { address = 0x83230BA0, size = 0xD4 },
+    { address = 0x83294C98, size = 0xC4 },
+    { address = 0x83306958, size = 0x168 },
+    { address = 0x83370860, size = 0x88 },
+    { address = 0x835FCE70, size = 0xA0 },
+    { address = 0x83625908, size = 0x100 },
+    { address = 0x83644528, size = 0xE0 },
+    { address = 0x83664908, size = 0x784 },
+    { address = 0x836922C0, size = 0x1D4 },
+    { address = 0x8369A6F0, size = 0xF8 },
+    { address = 0x836BBD08, size = 0x15C },
+    { address = 0x836DCEF8, size = 0x174 },
+    { address = 0x8373F498, size = 0xA4 },
+    { address = 0x837AFD80, size = 0x224 },
+    { address = 0x83826F58, size = 0x110 },
+    { address = 0x8389D9C8, size = 0x80 },
+    { address = 0x8399CEB8, size = 0x68 },
+    { address = 0x8399CF20, size = 0x64 },
+    { address = 0x8399CF88, size = 0x5C },
+    { address = 0x8399CFE8, size = 0x198 },
+    { address = 0x8399D180, size = 0x16C },
+    { address = 0x839D3750, size = 0x270 },
+    { address = 0x83A2D888, size = 0x948 },
+    { address = 0x83A2E1D0, size = 0x54C },
+]
+# END AUTO-FUNCTIONS
+
+# Found by byte pattern (DAO scripts/find_helpers.py), one hit each.
+restgprlr_14_address = 0x835FCF60
+savegprlr_14_address = 0x835FCF10
+restfpr_14_address = 0x83600EDC
+savefpr_14_address = 0x83600E90
+restvmx_14_address = 0x836025F8
+savevmx_14_address = 0x83602360
+restvmx_64_address = 0x8360268C
+savevmx_64_address = 0x836023F4
+
+# longjmp restores f14.. from the jmp_buf and calls RtlUnwind (0x83608A20, .pdata).
+# setjmp stores f14.. into it (0x83608750, no .pdata; starts with a hook-pointer check,
+# 11 callers). Unlike DAO, setjmp sits before longjmp.
+longjmp_address = 0x83608A20
+setjmp_address = 0x83608750
+
+# Data that sits between functions: exception-handler records (handler, scope data).
+# .pdata has 164 functions with the exception flag: 94 __C_specific_handler (the
+# xboxkrnl import thunk), 66 __CxxFrameHandler (CRT, 0x8361A3C8).
+invalid_instructions = [
+    { data = 0x00000000, size = 4 }, # padding
+    { data = 0x8361A3C8, size = 8 }, # __CxxFrameHandler record
+    { data = 0x83A8B730, size = 8 }, # __C_specific_handler record
+]

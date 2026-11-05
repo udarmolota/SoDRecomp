@@ -1,0 +1,26 @@
+# An allowlist: everything at the top is ignored except what is named below. Never in this
+# repository: the player's game (raw/, extracted/, install/), the code XenonRecomp generates
+# from it (ppc/), build trees (build/), analysis captures and screenshots, the spike, and the
+# development logs (*_LOG.md, *_RESULT.md and the other notes at the top: they stay local).
+/*
+!/.gitignore
+!/.gitattributes
+!/.gitmodules
+!/LICENSE
+!/README.md
+!/SoDRecomp/
+!/XenonRecomp
+!/android/
+!/cmake/
+!/config/
+!/presets/
+!/scripts/
+!/tests/
+!/tools/
+
+# Inside the allowed folders.
+__pycache__/
+*.pyc
+*.orig
+/tests/insn/gen/
+/tests/insn/obj/

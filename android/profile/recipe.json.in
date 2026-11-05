@@ -1,0 +1,103 @@
+{
+  "format": 2,
+  "version": "sod-1",
+  "game": { "id": "sod", "title": "State of Decay", "title_ids": ["584111E8"] },
+  "source": { "formats": ["stfs"], "pick": "tree" },
+  "requires": { "kit": 1, "abi": @ABI@, "tools": { "clang": "@CLANG@", "xenonrecomp": "@XENONRECOMP@" } },
+  "space": { "game_mb": 2600, "work_mb": 1300, "install_mb": 250 },
+  "inputs": {
+    "xex": { "path": "${GAME}/game/default.xex", "sha256": ["@XEX_SHA256@"] }
+  },
+  "vars": {
+    "CXXFLAGS": [
+      "--target=aarch64-none-linux-android29", "--sysroot=${KIT}/sysroot",
+      "-resource-dir", "${KIT}/clang/22",
+      "-DANDROID", "-fdata-sections", "-ffunction-sections", "-funwind-tables",
+      "-fstack-protector-strong", "-D_FORTIFY_SOURCE=2", "-O3", "-DNDEBUG",
+      "-std=gnu++20", "-fPIC"
+    ],
+    "PPCFLAGS": [
+      "-fno-strict-aliasing", "-ffp-model=strict", "-ffp-contract=off",
+      "-Wno-unused-label", "-Wno-unused-variable", "-Wno-unused-but-set-variable",
+      "-I${WORK}/ppc", "-I${PROFILE}/include/simde",
+      "-include", "${PROFILE}/include/mmio_hook.h"
+    ],
+    "PCH": [
+      "-Xclang", "-include-pch", "-Xclang", "${WORK}/pch/pch.hxx.pch",
+      "-Xclang", "-include", "-Xclang", "${WORK}/pch/pch.hxx"
+    ]
+  },
+  "jobs": { "max_rss_mb": 600, "reserve_mb": 1024 },
+  "steps": [
+    { "id": "extract", "kind": "extract", "label": "Extracting game files", "weight": 60,
+      "format": "stfs", "to": "${GAME}", "keeps_game": true },
+    { "id": "check-xex", "kind": "verify", "label": "Checking game version", "weight": 1,
+      "files": { "${GAME}/game/default.xex": ["@XEX_SHA256@"] },
+      "message": "unsupported_game_version" },
+    { "id": "xr-config", "kind": "write", "weight": 0,
+      "path": "${WORK}/xr/SoD.toml", "from": "${PROFILE}/xr/SoD.toml.in",
+      "creates": ["${WORK}/xr"] },
+    { "id": "xr-switch", "kind": "write", "weight": 0,
+      "path": "${WORK}/xr/SoD_switch_tables.toml", "from": "${PROFILE}/xr/SoD_switch_tables.toml" },
+    { "id": "recomp", "kind": "run", "label": "Translating game code", "weight": 10,
+      "tool": "xenonrecomp",
+      "args": ["${WORK}/xr/SoD.toml", "${PROFILE}/xr/ppc_context.h"],
+      "creates": ["${WORK}/ppc"],
+      "progress": "Recompiling functions\\.\\.\\. ([0-9.]+)%" },
+    { "id": "check-generated", "kind": "verify", "weight": 0,
+      "files": {
+        "${WORK}/ppc/ppc_config.h": ["@PPC_CONFIG_SHA256@"],
+        "${WORK}/ppc/ppc_context.h": ["@PPC_CONTEXT_SHA256@"]
+      },
+      "message": "profile_mismatch" },
+    { "id": "pch-stub", "kind": "write", "weight": 0, "path": "${WORK}/pch/pch.hxx",
+      "text": "#pragma clang system_header\n#include \"${WORK}/ppc/ppc_recomp_shared.h\"\n",
+      "creates": ["${WORK}/pch"] },
+    { "id": "pch", "kind": "run", "label": "Preparing compiler", "weight": 2, "tool": "clang",
+      "args": ["@CXXFLAGS", "@PPCFLAGS", "-x", "c++-header", "${WORK}/pch/pch.hxx",
+               "-o", "${WORK}/pch/pch.hxx.pch"] },
+    { "id": "game-code", "kind": "each", "label": "Compiling game code", "weight": 300,
+      "tool": "clang",
+      "inputs": { "glob": "${WORK}/ppc/ppc_recomp.*.cpp",
+                  "plus": ["${WORK}/ppc/ppc_func_mapping.cpp"] },
+      "args": ["@CXXFLAGS", "@PPCFLAGS", "@PCH", "-c", "${IN}", "-o", "${OBJ}"],
+      "objects": "${WORK}/obj/game-code",
+      "schedule": "longest_first", "cost_hints": {}, "fail": "stop" },
+    { "id": "build-info", "kind": "each", "label": "Compiling game code", "weight": 2,
+      "tool": "clang",
+      "inputs": { "plus": ["${PROFILE}/include/build_info_android.cpp"] },
+      "args": ["@CXXFLAGS",
+               "-DSOD_BUILD_INFO=SodBuildDisc", "-DSOD_BUILD_MAPPINGS=PPCFuncMappings",
+               "-I${WORK}/ppc", "-I${PROFILE}/include", "-I${PROFILE}/include/simde",
+               "-c", "${IN}", "-o", "${OBJ}"],
+      "objects": "${WORK}/obj/build-info" },
+    { "id": "link", "kind": "run", "label": "Linking", "weight": 5, "tool": "lld",
+      "message": "link_failed",
+      "args": ["-flavor", "gnu",
+               "--sysroot=${KIT}/sysroot", "-EL", "--fix-cortex-a53-843419",
+               "-z", "now", "-z", "relro", "-z", "max-page-size=16384",
+               "--hash-style=gnu", "--eh-frame-hdr", "-m", "aarch64linux", "-shared",
+               "-soname", "libgame.so", "--build-id=sha1", "--no-rosegment",
+               "--no-undefined", "--gc-sections", "-Bsymbolic", "--strip-debug",
+               "-o", "${WORK}/libgame.so",
+               "${KIT}/sysroot/usr/lib/aarch64-linux-android/29/crtbegin_so.o",
+               "-L${KIT}/sysroot/usr/lib/aarch64-linux-android/29",
+               "-L${KIT}/sysroot/usr/lib/aarch64-linux-android",
+               "--whole-archive", "${PROFILE}/lib/libsod-game.a", "--no-whole-archive",
+               "@objects:build-info", "@objects:game-code",
+               "${PROFILE}/lib/libsod-deps.a",
+               "${TOOLS}/libSDL3.so",
+               "-landroid", "-llog", "-ldl", "-latomic", "-lm",
+               "-Bstatic", "-lc++", "-Bdynamic", "-lm",
+               "${KIT}/clang/lib/libclang_rt.builtins-aarch64-android.a", "-l:libunwind.a",
+               "-ldl", "-lc",
+               "${KIT}/clang/lib/libclang_rt.builtins-aarch64-android.a", "-l:libunwind.a",
+               "-ldl",
+               "${KIT}/sysroot/usr/lib/aarch64-linux-android/29/crtend_so.o"] }
+  ],
+  "result": {
+    "library": "${WORK}/libgame.so",
+    "install": "${INSTANCE}/libgame.so",
+    "keep": ["${WORK}/logs"]
+  }
+}
