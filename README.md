@@ -44,21 +44,20 @@ scripts/make_profile.sh
 ```
 
 It configures `build/profile` with `-DXDROID360_PROFILE_BUILD=ON` (no generated code needed) and
-writes the profile to the toolchain's `out/games/`. It needs:
+writes the profile to `build/out/` (`sod/` and `sod.zip`; `PROFILE_OUT` for another folder). It
+needs:
 
-- `XDROID360_ROOT`: an XDroid360 checkout with its `recomp` submodule and recomp's installer
-  tools (xenia-canary's third_party, CMake, Ninja);
-- `TOOLCHAIN`: an [xdroid360-toolchain](https://github.com/udarmolota/xdroid360-toolchain)
-  checkout with its `out/kit` built;
-- `ANDROID_NDK_HOME`: NDK 27.3.13750724.
+- `XDROID360_ROOT`: an XDroid360 checkout with its `recomp` submodule and the sources
+  `scripts/fetch_build_sources.py` checks out (xenia-canary's third_party). Its `toolchain/env.sh`
+  names the NDK and the tool versions `recipe.json` pins (clang, XenonRecomp);
+- `ANDROID_NDK_HOME`: NDK 27.3.13750724;
+- the submodules, with XenonRecomp patched by `scripts/patch_xenonrecomp.py`.
 
-The recipe format is the toolchain's `RECIPE_FORMAT_DRAFT.md`.
+The recipe format is XDroid360's `toolchain/RECIPE_FORMAT_DRAFT.md`.
 
-On GitHub, `.github/workflows/profile.yml` builds it on Linux. It uses the XDroid360 commit
-and the toolchain release pinned in `android/profile/build-inputs.json`, and gets their
-sources with `scripts/fetch_build_sources.py` and `scripts/patch_xenonrecomp.py`. A tag
-`profile-sod-<n>` publishes the release that XDroid360 pins by sha256:
-`xdroid360-profile-sod-<n>.zip`, `recipe.json` and `SHA256SUMS`.
+On GitHub, `.github/workflows/profile.yml` builds it on Linux against the XDroid360 commit
+pinned in `android/profile/build-inputs.json`. A tag `profile-sod-<n>` publishes the release
+that XDroid360 pins by sha256: `xdroid360-profile-sod-<n>.zip`, `recipe.json` and `SHA256SUMS`.
 
 ## Licences
 

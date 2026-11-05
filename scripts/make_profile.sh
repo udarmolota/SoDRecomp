@@ -1,44 +1,52 @@
 #!/usr/bin/env bash
-# P2 item 2: State of Decay's game profile for the XDroid360 launcher's on-device build
-# (recipe format v2, SD1/toolchain/RECIPE_FORMAT_DRAFT.md):
-#   SD1/toolchain/out/games/sod/   recipe.json, lib/, include/, xr/
-#   SD1/toolchain/out/games/sod.zip
+# State of Decay's game profile for the XDroid360 launcher's on-device build (recipe format v2,
+# the launcher's toolchain/RECIPE_FORMAT_DRAFT.md):
+#   build/out/sod/      recipe.json, lib/, include/, xr/, licenses/
+#   build/out/sod.zip   (PROFILE_OUT: another folder for both)
 # lib/libsod-game.a  the runtime (android/runtime) and the front end (android/app/cpp,
 #                    libsod-frontend.a), linked --whole-archive on the phone
-# lib/libsod-deps.a  every other archive libgame.so links today (XenonUtils, Xenia, FFmpeg,
-#                    ...), merged; taken from the dev build's own link line, so it can't drift
+# lib/libsod-deps.a  every other archive libgame.so links (XenonUtils, Xenia, FFmpeg, ...),
+#                    merged; taken from the build's own link line, so it can't drift
 # Both without debug info (llvm-strip -g); the symbol tables stay for crash traces.
 # licenses/: the license texts of everything in the archives and include/ (INDEX.md).
 # Built in its own profile build (build/profile, CMake option XDROID360_PROFILE_BUILD), which
 # needs no game: the runtime compiles against android/profile/inputs (the two generated
-# headers it includes, and default.xex's sha256). Needs toolchain/out/kit (package.sh).
+# headers it includes, and default.xex's sha256). recipe.json's tool versions come from the
+# launcher's toolchain/env.sh (LLVM_VERSION, XR_VERSION): no kit is needed.
 # Holds no game code or data: the phone makes those from the player's disc.
 #
-# Paths, each settable in the environment (defaults: the author's layout, this checkout next
-# to the toolchain's, and the XDroid360 checkout one level up from both):
-#   TOOLCHAIN       the xdroid360-toolchain checkout (its out/ receives games/sod)
-#   XDROID360_ROOT  an XDroid360 checkout (the launcher's ABI header, recomp's tools and Xenia)
-#   ANDROID_NDK_HOME, DAO_TOOLS as in the toolchain's env.sh
+# Paths, each settable in the environment:
+#   XDROID360_ROOT  an XDroid360 checkout: toolchain/env.sh, the launcher's ABI header,
+#                   recomp's Xenia and xenia-canary's third_party (scripts/fetch_build_sources.py);
+#                   default: the author's layout, one level above this checkout's parent
+#   TOOLCHAIN       the folder with env.sh (default: $XDROID360_ROOT/toolchain)
+#   ANDROID_NDK_HOME, CMAKE, NINJA as in env.sh; XR_SRC, SDL_SRC default to this checkout's
+#   submodules (XenonRecomp patched by scripts/patch_xenonrecomp.py)
 # Usage: scripts/make_profile.sh
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 B=${PROFILE_BUILD_DIR:-$ROOT/build/profile}
 INPUTS=$ROOT/android/profile/inputs
-TOOLCHAIN=${TOOLCHAIN:-$ROOT/../toolchain}
-TOOLCHAIN=$(cd "$TOOLCHAIN" && pwd)
+XDROID360_ROOT=${XDROID360_ROOT:-$ROOT/../../DAO}
+XDROID360_ROOT=$(cd "$XDROID360_ROOT" && pwd)
+# (Until XDroid360 has toolchain/: the toolchain folder beside this checkout.)
+if [ -z "${TOOLCHAIN:-}" ]; then
+  if [ -f "$XDROID360_ROOT/toolchain/env.sh" ]; then TOOLCHAIN=$XDROID360_ROOT/toolchain; else TOOLCHAIN=$ROOT/../toolchain; fi
+fi
+export XDROID360_ROOT
+export XR_SRC=${XR_SRC:-$ROOT/XenonRecomp}
+export SDL_SRC=${SDL_SRC:-$ROOT/SoDRecomp/thirdparty/SDL}
 . "$TOOLCHAIN/env.sh"
-KIT_JSON=$TOOLCHAIN/out/kit/kit.json
 ABI_HEADER=$XDROID360_ROOT/android/app/src/main/cpp/dao_abi.h
 XE_TP=$XENIA_CANARY/third_party
-OUT=$TOOLCHAIN/out/games/sod
+OUT_DIR=${PROFILE_OUT:-$ROOT/build/out}
+OUT=$OUT_DIR/sod
 # The first Python that runs (Windows has a python3 that only opens the Store).
 if [ -z "${PYTHON:-}" ]; then
   for PYTHON in python3 python; do "$PYTHON" -c "" 2>/dev/null && break; done
 fi
 # A path as native tools take it (Windows: C:/...; elsewhere as is).
 native() { if command -v cygpath > /dev/null; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
-
-[ -f "$KIT_JSON" ] || { echo "no $KIT_JSON: run toolchain/package.sh" >&2; exit 1; }
 
 # The dev build, up to date: the libraries the profile is cut from.
 [ -f "$B/build.ninja" ] || "$CMAKE" -G Ninja -S "$(native "$ROOT/android/app/cpp")" -B "$(native "$B")" \
@@ -110,8 +118,8 @@ done
 # ppc_context.h (XenonRecomp writes the latter from xr/ppc_context.h, byte for byte).
 sha() { sha256sum "$1" | cut -c1-64; }
 abi=$(sed -n 's/^#define[[:space:]]\+\(XDROID360_ABI\|DAO_ABI_VERSION\)[[:space:]]\+\([0-9]\+\).*/\2/p' "$ABI_HEADER" | head -1)
-clang=$("$PYTHON" -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["tools"]["clang"])' "$KIT_JSON")
-xr=$("$PYTHON" -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["tools"]["xenonrecomp"])' "$KIT_JSON")
+clang=$LLVM_VERSION
+xr=$XR_VERSION
 [ -n "$abi" ] || { echo "no ABI in $ABI_HEADER" >&2; exit 1; }
 sed -e "s|@ABI@|$abi|g" -e "s|@CLANG@|$clang|g" -e "s|@XENONRECOMP@|$xr|g" \
     -e "s|@XEX_SHA256@|$(cut -c1-64 "$INPUTS/default.xex.sha256")|g" \
@@ -205,7 +213,7 @@ the launcher generates from the player's own disc, and the launcher's libSDL3.so
 | SDL 3 (headers; linked against the launcher's libSDL3.so) | libsod-game.a | Zlib | SDL3.txt | https://github.com/libsdl-org/SDL |
 EOF
 
-(cd "$TOOLCHAIN/out/games" && "$PYTHON" -I -c '
+(cd "$OUT_DIR" && "$PYTHON" -I -c '
 import os, zipfile
 with zipfile.ZipFile("sod.zip", "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
     for root, dirs, files in os.walk("sod"):
