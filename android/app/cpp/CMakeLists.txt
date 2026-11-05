@@ -18,6 +18,9 @@ endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# No C++20 modules here: no dependency scan (as android/runtime). CMake would otherwise run
+# whatever clang-scan-deps it finds, and a host one (Linux CI) can't read the NDK clang's PCH.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # (SoD) sod360/android/app/cpp: sod360 is three levels up; SoDRecomp/ is the runtime.
 set(SOD_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
