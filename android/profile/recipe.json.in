@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "version": "sod-1",
+  "version": "sod-2",
   "game": { "id": "sod", "title": "State of Decay", "title_ids": ["584111E8"] },
   "source": { "formats": ["stfs"], "pick": "tree" },
   "requires": { "kit": 1, "abi": @ABI@, "tools": { "clang": "@CLANG@", "xenonrecomp": "@XENONRECOMP@" } },
@@ -27,7 +27,7 @@
       "-Xclang", "-include", "-Xclang", "${WORK}/pch/pch.hxx"
     ]
   },
-  "jobs": { "max_rss_mb": 600, "reserve_mb": 1024 },
+  "jobs": { "max_rss_mb": 550, "reserve_mb": 768 },
   "steps": [
     { "id": "extract", "kind": "extract", "label": "Extracting game files", "weight": 60,
       "format": "stfs", "to": "${GAME}", "keeps_game": true },

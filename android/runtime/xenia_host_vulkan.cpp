@@ -168,7 +168,10 @@ namespace sod::gpu
         // What the backend chose on this GPU, into sod.log (Xenia's own device listing goes
         // to logcat only); queued after the command processor's setup on its thread.
         auto* processor = static_cast<xe::gpu::vulkan::VulkanCommandProcessor*>(s_graphics->command_processor());
-        processor->CallInThread([processor] { LOGI("GPU paths: {}", processor->DaoDescribeHostPaths()); });
+        processor->CallInThread([processor] {
+            LOGI("GPU device: {}", processor->DaoDescribeDevice());
+            LOGI("GPU paths: {}", processor->DaoDescribeHostPaths());
+        });
         return true;
     }
 
