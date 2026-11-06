@@ -2,6 +2,6 @@
   "comment": "What CI builds the game profile against (.github/workflows/profile.yml): an XDroid360 commit with toolchain/ (env.sh: the NDK and tool versions recipe.json names), xenia-vulkan, the launcher's ABI header, and the recomp submodule with Xenia and its pinned third-party sources. Change only to a published commit.",
   "xdroid360": {
     "repo": "udarmolota/XDroid360",
-    "commit": "016fa3ef8b4b2c52a780370aeda8c29580f0aae9"
+    "commit": "3f25673f15fd33063fe89fe1061924a872e86606"
   }
 }

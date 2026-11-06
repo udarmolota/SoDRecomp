@@ -5,8 +5,10 @@
 #include <android/native_window.h>
 
 #include <chrono>
+#include <dlfcn.h>
 #include <unordered_map>
 
+#include "gpu/video.h"
 #include "input/input.h"
 #include "kernel/game_exit.h"
 #include "xenia/ui/surface_android.h"
@@ -65,6 +67,60 @@ namespace sod::app
         Wake();
     }
 
+    // The display's refresh fitted to the game's frame rate: at the game's own 30 fps cap,
+    // 60 Hz rather than a phone's 120 (less power and heat; each frame shown twice), not 30,
+    // so a frame that misses its 33 ms waits a 17 ms refresh, not another 33 ms. Any other
+    // rate: the phone's choice (a fixed 120 can land on 60 on a 90 Hz panel). Android 11's
+    // ANativeWindow_setFrameRate, looked up at run time (the app runs from Android 10);
+    // checked once a second, as the rate can change in the game's Graphics tab.
+    static void UpdateDisplayRate(SDL_Window* window)
+    {
+        using SetFrameRateFn = int32_t (*)(ANativeWindow*, float, int8_t);
+        // From libandroid.so's own handle: dlsym(RTLD_DEFAULT) searches only the app's linker
+        // namespace, where the system's libandroid.so (linked in from the default one) isn't
+        // found. A public library, so dlopen just takes a reference to the loaded one.
+        static const auto setFrameRate = []() -> SetFrameRateFn {
+            void* const libandroid = dlopen("libandroid.so", RTLD_NOW);
+            auto* const fn =
+                libandroid ? reinterpret_cast<SetFrameRateFn>(dlsym(libandroid, "ANativeWindow_setFrameRate")) : nullptr;
+            if (!fn)
+                LOGI("Display refresh: no ANativeWindow_setFrameRate (Android 10, or {})",
+                    libandroid ? "not in libandroid.so" : "no libandroid.so");
+            return fn;
+        }();
+        static std::chrono::steady_clock::time_point s_next;
+        static ANativeWindow* s_window = nullptr;
+        static int s_rate = -1;
+        static bool s_noWindowLogged = false;
+        if (!setFrameRate)
+            return;
+        const auto now = std::chrono::steady_clock::now();
+        if (now < s_next)
+            return;
+        s_next = now + std::chrono::seconds(1);
+        auto* nativeWindow = static_cast<ANativeWindow*>(
+            SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr));
+        const int rate = sod::gpu::FrameRate(); // 0: unlimited
+        if (!nativeWindow)
+        {
+            // Normal for the first moments (no surface yet), so only once.
+            if (!s_noWindowLogged)
+                LOGI("Display refresh: no window yet");
+            s_noWindowLogged = true;
+            return;
+        }
+        if (nativeWindow == s_window && rate == s_rate)
+            return;
+        // 30 fps: 60 Hz; anything else, or unlimited: the phone's own choice (0).
+        const float hz = rate == 30 ? 60.0f : 0.0f;
+        constexpr int8_t kFixedSource = 1; // ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+        const int32_t result = setFrameRate(nativeWindow, hz, kFixedSource);
+        LOGI("Display refresh: {} for {} fps (result {})", hz > 0 ? fmt::format("{} Hz requested", hz) : std::string("the phone's"),
+            rate, result);
+        s_window = nativeWindow;
+        s_rate = rate;
+    }
+
     void SdlWindowedAppContext::RunUILoop(SDL_Window* window, SdlWindow* xeWindow)
     {
         bool surfaceLost = false;
@@ -78,6 +134,7 @@ namespace sod::app
         for (;;)
         {
             SDL_Event event;
+            UpdateDisplayRate(window);
             if (countEvents)
             {
                 const auto now = std::chrono::steady_clock::now();
