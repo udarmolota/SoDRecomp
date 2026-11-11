@@ -93,6 +93,17 @@ namespace sod::gpu::native
         // Xenia options; that is harmless. Read once, before the renderer is created.
         void ApplyRendererSettings(const std::filesystem::path& userRoot)
         {
+            // (SoD) What this game needs from the renderer, off by default there (Dragon Age does
+            // not use any of it): its occlusion queries subtract consecutive sample count snapshots;
+            // it draws its lights as 2_10_10_10_FLOAT and resolves the same EDRAM memory as
+            // 2_10_10_10, decoding the 7e3 bits in its shaders; it restores its normals with a fetch
+            // constant of type 0; its albedo textures are gamma. config.toml can still override them.
+            for (const char* name : { "xdroid360_oclusion_acumulada", "xdroid360_alias_edram",
+                                      "xdroid360_fetch_tipo_invalido", "xdroid360_texturas_gamma" })
+            {
+                if (!rex::cvar::GetFlagInfo(name) || !rex::cvar::SetFlagByName(name, "true"))
+                    LOGW("Native renderer setting {}: not set (an older renderer?)", name);
+            }
             std::ifstream file(userRoot / "config.toml");
             std::string line;
             bool inside = false;
