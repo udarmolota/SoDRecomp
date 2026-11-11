@@ -104,6 +104,12 @@ namespace sod::gpu::native
                 if (!rex::cvar::GetFlagInfo(name) || !rex::cvar::SetFlagByName(name, "true"))
                     LOGW("Native renderer setting {}: not set (an older renderer?)", name);
             }
+            // And one of Most Wanted's savings off: it leaves alpha-tested draws out of the shadow
+            // maps (that game's trees and fences), and here the characters' clothes and the foliage
+            // are alpha tested, so only a character's head cast a shadow.
+            if (!rex::cvar::GetFlagInfo("nfsmw_sombras_sin_vegetacion") ||
+                !rex::cvar::SetFlagByName("nfsmw_sombras_sin_vegetacion", "false"))
+                LOGW("Native renderer setting nfsmw_sombras_sin_vegetacion: not set");
             std::ifstream file(userRoot / "config.toml");
             std::string line;
             bool inside = false;
