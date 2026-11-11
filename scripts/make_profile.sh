@@ -161,6 +161,8 @@ lic tiny-AES-c.txt "$XR_SRC/thirdparty/tiny-AES-c/unlicense.txt"
 sed -n '1,/\*\//p' "$XR_SRC/thirdparty/TinySHA1/TinySHA1.hpp" > "$LIC/TinySHA1.txt"
 lic SIMDe.txt "$XR_SRC/thirdparty/simde/COPYING"
 lic SDL3.txt "$SDL_SRC/LICENSE.txt"
+lic native-renderer-GPL-3.0.txt "$XDROID360_ROOT/native-renderer/LICENSE"
+lic native-renderer-NOTICE.md "$XDROID360_ROOT/native-renderer/NOTICE.md"
 # linkernsbypass carries only its SPDX line and copyright: the BSD-2-Clause text with them.
 cat > "$LIC/linkernsbypass.txt" <<'EOF'
 liblinkernsbypass (android/app/cpp/linkernsbypass)
@@ -211,6 +213,7 @@ the launcher generates from the player's own disc, and the launcher's libSDL3.so
 | SIMDe | include/simde, libsod-game.a | MIT | SIMDe.txt | https://github.com/simd-everywhere/simde |
 | liblinkernsbypass | libsod-deps.a | BSD-2-Clause | linkernsbypass.txt | https://github.com/bylaws/liblinkernsbypass |
 | SDL 3 (headers; linked against the launcher's libSDL3.so) | libsod-game.a | Zlib | SDL3.txt | https://github.com/libsdl-org/SDL |
+| The native renderer (XDroid360's port of nfsmw-android's EDRAM-free renderer; off unless config.toml asks for it) | libsod-deps.a | **GPL-3.0**: libgame.so as a whole is GPL-3.0 | native-renderer-GPL-3.0.txt, native-renderer-NOTICE.md | https://github.com/udarmolota/XDroid360 (native-renderer/) |
 EOF
 
 (cd "$OUT_DIR" && "$PYTHON" -I -c '

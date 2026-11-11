@@ -1,10 +1,10 @@
 {
   "format": 2,
-  "version": "sod-3",
+  "version": "sod-4",
   "game": { "id": "sod", "title": "State of Decay", "title_ids": ["584111E8"] },
   "source": { "formats": ["stfs"], "pick": "tree" },
   "requires": { "kit": 1, "abi": @ABI@, "tools": { "clang": "@CLANG@", "xenonrecomp": "@XENONRECOMP@" } },
-  "space": { "game_mb": 2600, "work_mb": 1300, "install_mb": 250 },
+  "space": { "game_mb": 2615, "work_mb": 1300, "install_mb": 250 },
   "inputs": {
     "xex": { "path": "${GAME}/game/default.xex", "sha256": ["@XEX_SHA256@"] }
   },
@@ -34,6 +34,10 @@
     { "id": "check-xex", "kind": "verify", "label": "Checking game version", "weight": 1,
       "files": { "${GAME}/game/default.xex": ["@XEX_SHA256@"] },
       "message": "unsupported_game_version" },
+    { "id": "shaders", "kind": "run", "label": "Translating shaders", "weight": 2,
+      "tool": "shaderlib", "rerun": true, "creates": ["${GAME}/userdata"],
+      "args": ["${GAME}/game/engine/shaders.pak", "${GAME}/userdata/nfsmw_shaders.nfsp", "-j", "${JOBS}"],
+      "progress": "progress ([0-9]+)/([0-9]+)" },
     { "id": "xr-config", "kind": "write", "weight": 0,
       "path": "${WORK}/xr/SoD.toml", "from": "${PROFILE}/xr/SoD.toml.in",
       "creates": ["${WORK}/xr"] },

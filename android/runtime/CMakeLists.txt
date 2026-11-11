@@ -59,6 +59,17 @@ set(SOD_SHARED_XENIA_VULKAN "${XDROID360_ROOT}/xenia-vulkan" CACHE PATH "DAO's x
 get_filename_component(SOD_SHARED_XENIA ${SOD_SHARED_XENIA_VULKAN}/../recomp/xenia ABSOLUTE)
 add_subdirectory(${SOD_SHARED_XENIA_VULKAN} ${CMAKE_BINARY_DIR}/xenia-vulkan)
 
+# ---------------------------------------------------------------- the native renderer
+
+# (SoD) XDroid360's EDRAM-free renderer from nfsmw-android (native-renderer/NOTICE.md), next to
+# Xenia's GPU emulation, read-only from the XDroid360 checkout like xenia-vulkan; config.toml
+# [xenia] dao_gpu_renderer picks one at startup (native_host.h).
+set(XDROID360_SOURCE_ROOT ${XDROID360_ROOT})
+set(XDROID360_DEPS_ROOT ${XDROID360_ROOT})
+set(XDROID360_GEN_DIR ${CMAKE_BINARY_DIR}/xenia-vulkan/gen)
+add_subdirectory(${XDROID360_ROOT}/native-renderer ${CMAKE_BINARY_DIR}/native-renderer)
+add_dependencies(native-renderer xenia-spirv-shaders)
+
 # ---------------------------------------------------------------- XenonUtils (XEX loading)
 
 add_library(XenonUtils STATIC
@@ -136,7 +147,9 @@ add_library(daodroid-runtime STATIC
     ${SOD_SRC}/hash.cpp
     ${SOD_SRC}/program.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/profiler.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/xenia_host_vulkan.cpp)
+    ${CMAKE_CURRENT_SOURCE_DIR}/xenia_host_vulkan.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/native_host.cpp
+    ${SOD_SRC}/gpu/native_hooks.cpp)
 target_include_directories(daodroid-runtime PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${SOD_SRC}
@@ -158,10 +171,16 @@ set(SOD_RUNTIME_OPTIONS
     -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function)
 target_compile_options(daodroid-runtime PRIVATE ${SOD_RUNTIME_OPTIONS})
 if (XDROID360_PROFILE_BUILD)
-    target_link_libraries(daodroid-runtime PUBLIC XenonUtils dao-xenia-vulkan libavcodec libavutil log)
+    target_link_libraries(daodroid-runtime PUBLIC XenonUtils dao-xenia-vulkan native-renderer libavcodec libavutil log)
 else()
-    target_link_libraries(daodroid-runtime PUBLIC daobuildinfo daoppc XenonUtils dao-xenia-vulkan libavcodec libavutil log)
+    target_link_libraries(daodroid-runtime PUBLIC daobuildinfo daoppc XenonUtils dao-xenia-vulkan native-renderer libavcodec libavutil log)
 endif()
+# The native renderer is linked: the game's D3D hooks into it (gpu/native_hooks.cpp, under
+# XDROID360_NATIVE_RENDERER) are compiled, and they and native_host.cpp see the renderer's
+# headers (its compat layer first), as in DAO's runtime.
+target_compile_definitions(daodroid-runtime PRIVATE XDROID360_NATIVE_RENDERER=1)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/native_host.cpp ${SOD_SRC}/gpu/native_hooks.cpp
+    PROPERTIES INCLUDE_DIRECTORIES "${XDROID360_ROOT}/native-renderer/compat;${XDROID360_ROOT}/native-renderer/src")
 
 # ---------------------------------------------------------------- headless front end
 

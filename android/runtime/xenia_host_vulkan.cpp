@@ -32,6 +32,7 @@
 #include "xenia/ui/window.h"
 #include "xenia/ui/windowed_app_context.h"
 
+#include "native_host.h"
 #include "xenia_host_android.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -74,6 +75,14 @@ namespace sod::gpu
             }
             config.SetDither(true);
             return config;
+        }
+
+        // The GPU's presenter: Xenia's, or the native renderer's (native_host.h).
+        xe::ui::Presenter* ActivePresenter()
+        {
+            if (native::Active())
+                return native::Presenter();
+            return s_graphics ? s_graphics->presenter() : nullptr;
         }
 
         void WritePngFile(void* context, void* data, int size)
@@ -121,6 +130,43 @@ namespace sod::gpu
             xe::ui::vulkan::dao_icd::SetLoaderLibrary(s_windowHost.loaderLibrary);
 
         s_memory = std::make_unique<xe::Memory>();
+
+        // The native renderer instead of Xenia's GPU emulation (config.toml [xenia]
+        // dao_gpu_renderer = "native"); if it can't start, Xenia as usual.
+        if (native::Requested())
+        {
+            if (native::Initialize(userRoot, s_memory.get(), s_windowHost.appContext))
+            {
+                if (s_windowHost.appContext && s_windowHost.createWindow)
+                {
+                    bool opened = false;
+                    s_windowHost.appContext->CallInUIThreadSynchronous([&opened] {
+                        s_window = s_windowHost.createWindow();
+                        opened = s_window && s_window->Open();
+                        if (opened)
+                            s_window->SetPresenter(native::Presenter());
+                    });
+                    if (!opened)
+                    {
+                        LOGE("Failed to open the game window");
+                        s_window.reset();
+                        native::Shutdown();
+                        s_memory.reset();
+                        return false;
+                    }
+                }
+                if (xe::ui::Presenter* presenter = native::Presenter())
+                {
+                    const Settings& settings = GetSettings();
+                    presenter->SetGuestOutputPaintConfigFromUIThread(
+                        OutputPaintConfig(settings.upscaler, settings.sharpness));
+                }
+                *g_memory.Translate<u32>(0x7FC80000 + 0x1951 * 4) = 1; // interrupt status: vblank
+                return true;
+            }
+            LOGW("Native renderer didn't start: Xenia's GPU emulation instead");
+        }
+
         s_graphics = std::make_unique<xe::gpu::vulkan::VulkanGraphicsSystem>();
         // With the app's window: its app context (the SDL thread is the UI thread) makes
         // the presenter there; headless: no app context, the presenter is created on this
@@ -177,11 +223,13 @@ namespace sod::gpu
 
     bool XeniaActive()
     {
-        return s_graphics != nullptr;
+        return s_graphics != nullptr || native::Active();
     }
 
     XeniaWindow GetXeniaWindow()
     {
+        if (native::Active())
+            return { s_window.get(), s_windowHost.appContext, native::Presenter(), native::Provider() };
         if (!s_graphics || !s_graphics->presenter())
             return {};
         return { s_window.get(), s_windowHost.appContext, s_graphics->presenter(), s_graphics->provider() };
@@ -191,10 +239,10 @@ namespace sod::gpu
 
     void XeniaSetOutputScaling(Upscaler upscaler, float sharpness)
     {
-        if (!s_graphics || !s_graphics->presenter())
+        if (!ActivePresenter())
             return;
         const auto apply = [upscaler, sharpness] {
-            s_graphics->presenter()->SetGuestOutputPaintConfigFromUIThread(OutputPaintConfig(upscaler, sharpness));
+            ActivePresenter()->SetGuestOutputPaintConfigFromUIThread(OutputPaintConfig(upscaler, sharpness));
         };
         if (s_windowHost.appContext)
             s_windowHost.appContext->CallInUIThread(apply);
@@ -204,21 +252,29 @@ namespace sod::gpu
 
     void XeniaInitializeRingBuffer(uint32_t physicalAddress, uint32_t sizeLog2)
     {
+        if (native::Active())
+            return native::InitializeRingBuffer(physicalAddress, sizeLog2);
         s_graphics->InitializeRingBuffer(physicalAddress, sizeLog2);
     }
 
     void XeniaEnableReadPointerWriteBack(uint32_t address, uint32_t blockSizeLog2)
     {
+        if (native::Active())
+            return native::EnableReadPointerWriteBack(address, blockSizeLog2);
         s_graphics->EnableReadPointerWriteBack(address, blockSizeLog2);
     }
 
     void XeniaSetInterruptCallback(uint32_t callback, uint32_t userData)
     {
+        if (native::Active())
+            return native::SetInterruptCallback(callback, userData);
         s_graphics->SetInterruptCallback(callback, userData);
     }
 
     void XeniaWriteRegister(uint32_t address, uint32_t value)
     {
+        if (native::Active())
+            return native::WriteRegister(address, value);
         s_graphics->WriteRegister(address, value);
     }
 
@@ -303,14 +359,16 @@ namespace sod::gpu
         dwords[offset++] = height;
         while (offset < 64)
             dwords[offset++] = xenos::MakePacketType2();
+        if (native::Active())
+            native::FrameSubmitted();
     }
 
     bool CaptureFrame(const std::filesystem::path& path, double aspect, bool sdr)
     {
-        if (!s_graphics || !s_graphics->presenter())
+        if (!ActivePresenter())
             return false;
         xe::ui::RawImage image;
-        if (!s_graphics->presenter()->CaptureGuestOutput(image, sdr) || !image.width || !image.height)
+        if (!ActivePresenter()->CaptureGuestOutput(image, sdr) || !image.width || !image.height)
             return false;
         // The middle of it at `aspect`.
         const auto [frameWidth, frameHeight] = FrameSize(image.width, image.height, aspect);
@@ -337,10 +395,10 @@ namespace sod::gpu
 
     uint64_t HashFrame()
     {
-        if (!s_graphics || !s_graphics->presenter())
+        if (!ActivePresenter())
             return 0;
         xe::ui::RawImage image;
-        if (!s_graphics->presenter()->CaptureGuestOutput(image) || !image.width)
+        if (!ActivePresenter()->CaptureGuestOutput(image) || !image.width)
             return 0;
         return std::hash<std::string_view>{}(
             std::string_view(reinterpret_cast<const char*>(image.data.data()), image.data.size()));
@@ -348,10 +406,10 @@ namespace sod::gpu
 
     bool CaptureHalfRes(std::vector<uint8_t>& rgb, uint32_t& width, uint32_t& height)
     {
-        if (!s_graphics || !s_graphics->presenter())
+        if (!ActivePresenter())
             return false;
         xe::ui::RawImage image;
-        if (!s_graphics->presenter()->CaptureGuestOutput(image) || image.width < 2 || image.height < 2)
+        if (!ActivePresenter()->CaptureGuestOutput(image) || image.width < 2 || image.height < 2)
             return false;
         width = image.width / 2;
         height = image.height / 2;
