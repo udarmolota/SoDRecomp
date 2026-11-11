@@ -57,8 +57,23 @@ jobs:
           test -f "$XDROID360_ROOT/toolchain/env.sh" ||
             { echo "XDroid360 ${{ steps.pins.outputs.commit }} has no toolchain/env.sh: pin a commit that has it"; exit 1; }
 
+      # The runner's Ubuntu mirrors sometimes fail to resolve ("Temporary failure resolving
+      # 'azure.archive.ubuntu.com'"): three tries a minute apart, then Ninja from PyPI.
       - name: Install Ninja
-        run: sudo apt-get update -q && sudo apt-get install -y -q ninja-build
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update -q && sudo apt-get install -y -q ninja-build; then
+              break
+            fi
+            echo "apt attempt $attempt failed"
+            sleep 60
+          done
+          if ! command -v ninja > /dev/null; then
+            pipx install ninja || python3 -m pip install --user --break-system-packages ninja
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+          ninja --version
 
       - name: Install NDK 27.3.13750724
         run: |
