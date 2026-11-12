@@ -114,6 +114,13 @@ namespace sod
             s.anisotropicFiltering = 0;
         if (std::ranges::find(kFrameRates, s.frameRate) == std::end(kFrameRates))
             s.frameRate = defaults.frameRate;
+#ifdef __ANDROID__
+        // On a phone only 30 and 60: above 60 (and unlimited, some 480 fps in the menus) the menus and
+        // loading screens flicker, black with their text drawn over the previous frames (the game draws
+        // them over the last frame and is tuned for 30).
+        if (s.frameRate == 0 || s.frameRate > 60)
+            s.frameRate = 60;
+#endif
         s.hdrPaperWhite = std::clamp(s.hdrPaperWhite, kHdrMinNits, kHdrMaxPaperWhite);
         s.hdrPeak = std::clamp(s.hdrPeak, s.hdrPaperWhite, kHdrMaxPeak);
         s.motionBlur = std::clamp(s.motionBlur, 0, kMaxMotionBlur);

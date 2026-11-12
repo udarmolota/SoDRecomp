@@ -106,6 +106,12 @@ grep -q '^out_directory_path = "${WORK}/ppc"$' "$OUT/xr/SoD.toml.in"
 cp "$ROOT/config/SoD_switch_tables.toml" "$OUT/xr/"
 cp "$ROOT/XenonRecomp/XenonUtils/ppc_context.h" "$OUT/xr/ppc_context.h"
 
+# LF line endings in xr/ and include/, as CI's Linux checkout has them: the launcher keeps a game's
+# compiled code across an Update game only while these files are byte-identical, and a Windows
+# checkout (core.autocrlf) gives CRLF, so a local profile and a CI one forced a full recompile.
+find "$OUT/xr" "$OUT/include" -type f \( -name '*.h' -o -name '*.hpp' -o -name '*.toml' -o -name '*.in' \) \
+    -exec sed -i 's/\r$//' {} +
+
 # The committed inputs must match the generated headers where a local game's are at hand.
 for f in ppc_config.h ppc_context.h; do
   if [ -f "$ROOT/ppc/$f" ] && ! cmp -s "$ROOT/ppc/$f" "$INPUTS/$f"; then

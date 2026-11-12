@@ -98,12 +98,18 @@ namespace sod::gpu::native
             // it draws its lights as 2_10_10_10_FLOAT and resolves the same EDRAM memory as
             // 2_10_10_10, decoding the 7e3 bits in its shaders; it restores its normals with a fetch
             // constant of type 0; its albedo textures are gamma. config.toml can still override them.
+            // Also: its HDR scene resolves to formats other than 8_8_8_8, its D3D Clear carries the
+            // clear values in the rectangle's vertices, and it samples the 16-bit EXPAND formats.
             for (const char* name : { "xdroid360_oclusion_acumulada", "xdroid360_alias_edram",
-                                      "xdroid360_fetch_tipo_invalido", "xdroid360_texturas_gamma" })
+                                      "xdroid360_fetch_tipo_invalido", "xdroid360_texturas_gamma",
+                                      "xdroid360_copias_hdr", "xdroid360_texturas_expand" })
             {
                 if (!rex::cvar::GetFlagInfo(name) || !rex::cvar::SetFlagByName(name, "true"))
                     LOGW("Native renderer setting {}: not set (an older renderer?)", name);
             }
+            if (!rex::cvar::GetFlagInfo("xdroid360_borrado_d3d_vertices") ||
+                !rex::cvar::SetFlagByName("xdroid360_borrado_d3d_vertices", "1"))
+                LOGW("Native renderer setting xdroid360_borrado_d3d_vertices: not set");
             // And one of Most Wanted's savings off: it leaves alpha-tested draws out of the shadow
             // maps (that game's trees and fences), and here the characters' clothes and the foliage
             // are alpha tested, so only a character's head cast a shadow.
@@ -132,7 +138,11 @@ namespace sod::gpu::native
                 const size_t equals = text.find('=');
                 if (!inside || equals == std::string_view::npos)
                     continue;
-                const std::string name(trim(text.substr(0, equals)));
+                std::string name(trim(text.substr(0, equals)));
+                // The launcher's texture detail setting is the emulated renderer's
+                // dao_texture_lod_bias; the native renderer takes it as xdroid360_sesgo_lod.
+                if (name == "dao_texture_lod_bias")
+                    name = "xdroid360_sesgo_lod";
                 std::string_view value = trim(text.substr(equals + 1));
                 if (!value.empty() && value[0] == '"')
                 {
