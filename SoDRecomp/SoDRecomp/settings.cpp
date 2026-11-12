@@ -145,6 +145,8 @@ namespace sod
         {
         case Language::Italian: return "italian";
         case Language::Spanish: return "spanish";
+        case Language::French: return "french";
+        case Language::German: return "german";
         default: return "english";
         }
     }
@@ -296,8 +298,8 @@ check_updates = {}
 mods_warning_seen = {}
 
 [game]
-# The game's language: "english", "italian" or "spanish" (the text and menus; the voices are
-# English in each), the ones the disc has text for. Takes effect at the next start.
+# The game's language: "english", "italian", "spanish", "french" or "german" (the text and
+# menus; the voices are English in each), the ones the disc has text for. Takes effect at the next start.
 language = "{}"
 
 [video]

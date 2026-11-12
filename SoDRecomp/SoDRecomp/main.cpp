@@ -338,6 +338,7 @@ int main(int argc, char** argv)
     sod::apu::InitializeXmaHardware();
 
     sod::LoadSettings(userRoot);
+    VfsMountRussianText(gameRoot);
     sod::gpu::LoadXeniaLiveSettings();
     {
         // Same rule as the launcher: mod folders not in config.toml yet are enabled.

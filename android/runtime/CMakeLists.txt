@@ -128,6 +128,7 @@ add_library(daodroid-runtime STATIC
     ${SOD_SRC}/kernel/xnet.cpp
     ${SOD_SRC}/kernel/xboxkrnl_dpc.cpp
     ${SOD_SRC}/kernel/game_log.cpp
+    ${SOD_SRC}/kernel/text_db.cpp
     ${SOD_SRC}/apu/audio.cpp
     ${SOD_SRC}/apu/xma_decoder.cpp
     ${SOD_SRC}/apu/xma_trace.cpp

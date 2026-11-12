@@ -2,6 +2,7 @@
 #include "vfs.h"
 
 #include "host_file.h"
+#include "settings.h"
 #include "text.h"
 
 namespace sod::kernel
@@ -237,6 +238,18 @@ namespace sod::kernel
             device.folders.emplace(rest, folder);
             folder = folder.parent_path();
         }
+    }
+
+    void VfsMountRussianText(const fs::path& gameRoot)
+    {
+        if (GetSettings().language != Language::French)
+            return;
+        const fs::path pak = gameRoot.parent_path() / "russian" / "gamedata.pak";
+        std::error_code ec;
+        if (!fs::is_regular_file(pak, ec))
+            return; // no Russian text built: French stays French
+        LOGI("Language: French plays in Russian ({})", Utf8(pak));
+        VfsAddFile("\\Device\\Cdrom0\\game\\gamedata.pak", pak);
     }
 
 #ifndef _WIN32

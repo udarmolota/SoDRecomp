@@ -303,6 +303,7 @@ int main(int argc, char* argv[])
     sod::apu::InitializeXmaHardware();
 
     sod::LoadSettings(userRoot);
+    VfsMountRussianText(gameRoot);
     sod::gpu::LoadXeniaLiveSettings();
     // The Options menu's Graphics tab is patched into the menu (and the menu movies made).
     sod::ui::InitializeGraphicsMenu();

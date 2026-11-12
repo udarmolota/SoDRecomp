@@ -189,6 +189,7 @@ int main(int argc, char** argv)
     StartTimeStampThread();
 
     sod::LoadSettings(userRoot);
+    VfsMountRussianText(gameRoot);
     sod::gpu::LoadXeniaLiveSettings();
     // The Options menu's Graphics tab is patched into the menu; makes userdata/generated.
     sod::ui::InitializeGraphicsMenu();

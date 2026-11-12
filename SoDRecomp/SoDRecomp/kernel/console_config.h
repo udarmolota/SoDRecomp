@@ -6,9 +6,10 @@
 namespace sod::kernel
 {
     // The console's language numbers (the Xbox 360 SDK's XC_LANGUAGE_*, as Xenia's
-    // XLanguage has them: English 1, Spanish 5, Italian 6), in Language's order. The
-    // game picks its text by them.
-    inline constexpr uint32_t kConsoleLanguages[] = { 1, 6, 5 };
+    // XLanguage has them: English 1, German 3, French 4, Spanish 5, Italian 6), in Language's order.
+    // The game picks its text by them. (SoD) French: where the install built the Russian text,
+    // it takes French's place (kernel/vfs.h, VfsMountRussianText).
+    inline constexpr uint32_t kConsoleLanguages[] = { 1, 6, 5, 4, 3 };
     static_assert(std::size(kConsoleLanguages) == size_t(kMaxLanguage) + 1);
 
     // Settings::language as the console's language number.

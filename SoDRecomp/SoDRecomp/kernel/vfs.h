@@ -28,6 +28,15 @@ namespace sod::kernel
     // Serves a host file the runtime generates at a guest path, above the overlays
     // (over the disc and the mods). Only that exact path resolves to it.
     void VfsAddFile(std::string_view guestPath, const std::filesystem::path& hostPath);
+    // (SoD) The Russian text. State of Decay has none of its own; a Russian title update the
+    // player supplies carries a translation, which the install rebuilds on the disc's string
+    // keys into French's file (languages/french.xbox360.btxt) inside a full copy of
+    // game\gamedata.pak, kept next to the game folder as russian/gamedata.pak (the launcher's
+    // libshaderlib.so --sod-russian). Where that copy exists, French plays in Russian: the
+    // game's game\gamedata.pak is served from it. Without it French is French. The whole pak, not just the text:
+    // CryPak takes a file's size from the pak it was first found in, and the game's text
+    // loader rejects a file whose size it didn't expect. Call after LoadSettings.
+    void VfsMountRussianText(const std::filesystem::path& gameRoot);
 
     // Resolves a guest path to a host path; nullopt if no device matches.
     std::optional<std::filesystem::path> VfsResolve(std::string_view guestPath);

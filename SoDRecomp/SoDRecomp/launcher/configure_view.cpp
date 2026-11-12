@@ -37,7 +37,8 @@ namespace sod::launcher
         constexpr const char* kLowLatencyNames[] = { "Off", "On", "On + Boost" };
         static_assert(std::size(kLowLatencyNames) == kMaxLowLatency + 1);
         // In Language's order; each in its own language too, as a player looks for it.
-        constexpr const char* kLanguageNames[] = { "English", "Italiano (Italian)", "Espa\u00F1ol (Spanish)" };
+        constexpr const char* kLanguageNames[] = { "English", "Italiano (Italian)", "Espa\u00F1ol (Spanish)",
+                                                    "Fran\u00E7ais (French)", "Deutsch (German)" };
         static_assert(std::size(kLanguageNames) == size_t(kMaxLanguage) + 1);
         // In UpdateChannel's order.
         constexpr const char* kUpdateChannelNames[] = { "Release", "Dev (test builds too)" };

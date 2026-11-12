@@ -13,7 +13,10 @@ namespace sod
     enum class UpdateChannel { Release, Dev };
     // The game's language: the ones the supported disc has text for (its voices are
     // English in each). The game reads it as the console's language.
-    enum class Language { English, Italian, Spanish };
+    // (SoD) French: a language of the disc. Where the player supplied a Russian title update and
+    // the install rebuilt the text from it (russian/gamedata.pak), French plays in Russian
+    // (kernel/vfs.h, VfsMountRussianText).
+    enum class Language { English, Italian, Spanish, French, German };
     // Dev on a dev release, Release on anything else (defined in
     // launcher/release_list.cpp, with the version tags).
     UpdateChannel DefaultUpdateChannel();
@@ -149,7 +152,7 @@ namespace sod
     // launcher list one name per level.
     constexpr int kMaxLowLatency = 2;
     // The last language (Settings::language); the launcher lists one name per language.
-    constexpr int kMaxLanguage = int(Language::Spanish);
+    constexpr int kMaxLanguage = int(Language::German);
     // The last temporal upscaler (Settings::temporalUpscaler); the in-game Graphics tab and the
     // launcher list one name per upscaler.
     constexpr int kMaxTemporalUpscaler = int(TemporalUpscaler::Dlss);
@@ -169,7 +172,7 @@ namespace sod
     // The HDR quality as config.toml writes it: "high", "standard".
     std::string_view HdrQualityName(bool high);
 
-    // The language as config.toml writes it: "english", "italian", "spanish".
+    // The language as config.toml writes it: "english", "italian", "spanish", "french", "german".
     std::string_view LanguageName(Language language);
 
     // The update channel as config.toml writes it: "release", "dev".
