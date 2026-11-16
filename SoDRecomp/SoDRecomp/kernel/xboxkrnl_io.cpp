@@ -220,10 +220,13 @@ namespace sod::imp
         return X_STATUS_SUCCESS;
     }
 
+    // Six arguments, as XAPI passes them (e.g. li r7,7 share access; li r8,0x4020 options). Taking the share
+    // access as the options set FILE_DIRECTORY_FILE, so opening an existing file failed with
+    // STATUS_NOT_A_DIRECTORY, and the real synchronous-I/O option was lost.
     uint32_t NtOpenFile(u32* handleOut, uint32_t access, X_OBJECT_ATTRIBUTES* attributes, X_IO_STATUS_BLOCK* iosb,
-        uint32_t options)
+        uint32_t shareAccess, uint32_t options)
     {
-        return NtCreateFile(handleOut, access, attributes, iosb, nullptr, 0, 0, Disposition::Open, options);
+        return NtCreateFile(handleOut, access, attributes, iosb, nullptr, 0, shareAccess, Disposition::Open, options);
     }
 
     // Completes an I/O request: status block, event, APC.

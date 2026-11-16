@@ -7,7 +7,10 @@
 // into textures, GPU memory read-back) have no Vulkan counterpart yet.
 #include "stdafx.h"
 
+#include <chrono>
 #include <condition_variable>
+#include <cstdio>
+#include <ctime>
 
 #include "gpu/xenia_host.h"
 #include "kernel/memory.h"
@@ -119,10 +122,78 @@ namespace sod::gpu
     void XeniaLowLatencyFrameSwapped() {}
     bool XeniaLowLatencyNeedsRestart() { return false; }
 
+    // Xenia's whole log (renderer device checks, [nativo] reports, warnings) into
+    // userdata/xenia.log as well. Some ROMs (realme/ColorOS seen) drop the info lines of
+    // third-party apps from logcat, so a bug report from them had none of it; the report zips
+    // every *.log in userdata up to 4 MB. The file is truncated at each start and stops at
+    // kMaxBytes with one closing line: the start of the run (device checks) is what matters.
+    class XeniaFileSink final : public xe::LogSink
+    {
+    public:
+        static constexpr size_t kMaxBytes = 3u << 20;
+
+        explicit XeniaFileSink(const std::filesystem::path& path) : m_file(std::fopen(path.c_str(), "w")) {}
+        ~XeniaFileSink() override
+        {
+            if (m_file)
+                std::fclose(m_file);
+        }
+        void Write(const char* buf, size_t size) override
+        {
+            std::lock_guard lock(m_mutex);
+            if (!m_file || m_full)
+                return;
+            for (size_t i = 0; i < size && !m_full; ++i)
+            {
+                if (m_at_line_start)
+                {
+                    // Wall-clock time per line, like logcat's, to line it up with the game's log.
+                    const auto now = std::chrono::system_clock::now();
+                    const std::time_t t = std::chrono::system_clock::to_time_t(now);
+                    const int ms = int(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                           now.time_since_epoch()).count() % 1000);
+                    std::tm tm{};
+                    localtime_r(&t, &tm);
+                    m_written += size_t(std::fprintf(m_file, "%02d:%02d:%02d.%03d ", tm.tm_hour, tm.tm_min,
+                                                     tm.tm_sec, ms));
+                    m_at_line_start = false;
+                }
+                std::fputc(buf[i], m_file);
+                ++m_written;
+                if (buf[i] == '\n')
+                {
+                    m_at_line_start = true;
+                    if (m_written >= kMaxBytes)
+                    {
+                        std::fputs("(xenia.log stops here: 3 MB reached)\n", m_file);
+                        std::fflush(m_file);
+                        m_full = true;
+                    }
+                }
+            }
+        }
+        void Flush() override
+        {
+            std::lock_guard lock(m_mutex);
+            if (m_file)
+                std::fflush(m_file);
+        }
+
+    private:
+        std::mutex m_mutex;
+        std::FILE* m_file;
+        size_t m_written = 0;
+        bool m_at_line_start = true;
+        bool m_full = false;
+    };
+
     bool InitializeXeniaGraphics(const std::filesystem::path& userRoot)
     {
-        // On Android Xenia's log goes to logcat (tag sod-xenia), not a file.
+        // On Android Xenia's log goes to logcat (tag sod-xenia), and all of it into
+        // userdata/xenia.log as well (XeniaFileSink), so a bug report has it even where the
+        // ROM filters logcat.
         xe::InitializeLogging("sod-xenia");
+        xe::AddLogSink(std::make_unique<XeniaFileSink>(userRoot / "xenia.log"));
         // DAO_GPU_STATS' reports into sod.log, next to the game's own.
         xe::gpu::vulkan::dao_stats::SetSink([](const char* line) { LOGI("{}", line); });
 
