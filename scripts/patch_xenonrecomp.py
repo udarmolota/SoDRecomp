@@ -21,9 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO = "udarmolota/Dragon-Age-Origins-Recomp-Android"
-COMMIT = "86b9d0b1a0af40a44439e9310f02f8c3f2489510"
+COMMIT = "bfbaa874323181191228ca20a7775f1725ee287a"
 SCRIPT = "scripts/patch_recompiler.py"
-SHA256 = "f007dcf14c2bc8579bebe404d8d466351e6858f2104cbcb5b5aad6793726d936"
+SHA256 = "55d637e3157206a8267e25d24823448bc956f2a1955ddbc389a15f511e1812e6"
 XENONRECOMP_COMMIT = "ddd128bcca99fe8bfbb99bea583c972351fa6ace"
 
 
