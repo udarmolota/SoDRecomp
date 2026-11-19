@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "version": "sod-14",
+  "version": "sod-15",
   "game": { "id": "sod", "title": "State of Decay", "title_ids": ["584111E8"] },
   "source": { "formats": ["stfs"], "pick": "tree" },
   "requires": { "kit": 1, "abi": @ABI@, "tools": { "clang": "@CLANG@", "xenonrecomp": "@XENONRECOMP@" } },
