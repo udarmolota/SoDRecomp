@@ -1,20 +1,33 @@
 // Host audio output: an SDL3 stream that plays the 5.1 frames the game's XAudio2
-// submits (sod::apu::PopFrame). SDL converts to the device's layout (e.g. downmixes
-// to stereo) and rate.
+// submits (sod::apu::PopFrame). The 5.1 frame is folded to stereo here, before SDL:
+// handed six channels, Android's own downmix (AAudio, OEM dependent) all but drops the
+// centre channel, where games put dialogue, so speech comes out faint and distant
+// while the front-channel sounds and music stay loud. SDL converts the rate.
 #include "stdafx.h"
 #include "apu/audio.h"
 #include "apu/audio_output.h"
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+
 namespace sod::apu
 {
     namespace
     {
+        constexpr uint32_t kOutputChannels = 2;
+
+        // 5.1 -> stereo fold (ITU-style, the same weights ME1Recomp uses): centre and
+        // surrounds at -3 dB, LFE dropped, then scaled by 1 / (1 + 0.707) so a full-scale
+        // front plus centre doesn't clip. XAudio2's 5.1 order: FL, FR, FC, LFE, BL, BR.
+        constexpr float kFoldCenter = 0.70710678f;
+        constexpr float kFoldSurround = 0.70710678f;
+        constexpr float kFoldScale = 0.58578644f;
+
         SDL_AudioStream* s_stream = nullptr;
         uint64_t s_underruns = 0;
         bool s_gameAudioStarted = false; // (the silence before the game's first frame isn't an underrun)
-        FILE* s_dump = nullptr; // SOD_AUDIO_DUMP=<path.wav>: what's played, as 6-channel float WAV
+        FILE* s_dump = nullptr; // SOD_AUDIO_DUMP=<path.wav>: the game's 5.1 output, as 6-channel float WAV
         uint32_t s_dumpBytes = 0;
 
         void UpdateDumpHeader()
@@ -33,27 +46,54 @@ namespace sod::apu
             fseek(s_dump, 0, SEEK_END);
         }
 
+        // Folds one planar 5.1 frame into interleaved stereo.
+        void FoldToStereo(const float* planar, float* stereo)
+        {
+            const float* fl = planar + 0 * kFrameChannelSamples;
+            const float* fr = planar + 1 * kFrameChannelSamples;
+            const float* fc = planar + 2 * kFrameChannelSamples;
+            const float* bl = planar + 4 * kFrameChannelSamples;
+            const float* br = planar + 5 * kFrameChannelSamples;
+            for (uint32_t s = 0; s < kFrameChannelSamples; s++)
+            {
+                const float mid = fc[s] * kFoldCenter;
+                stereo[s * 2] = std::clamp((fl[s] + mid + bl[s] * kFoldSurround) * kFoldScale, -1.0f, 1.0f);
+                stereo[s * 2 + 1] = std::clamp((fr[s] + mid + br[s] * kFoldSurround) * kFoldScale, -1.0f, 1.0f);
+            }
+        }
+
+        void DumpFrame(const float* planar)
+        {
+            float interleaved[kFrameSampleCount];
+            for (uint32_t s = 0; s < kFrameChannelSamples; s++)
+            {
+                for (uint32_t c = 0; c < kFrameChannels; c++)
+                    interleaved[s * kFrameChannels + c] = planar[c * kFrameChannelSamples + s];
+            }
+            fwrite(interleaved, sizeof(interleaved), 1, s_dump);
+            s_dumpBytes += uint32_t(sizeof(interleaved));
+            if ((s_dumpBytes / sizeof(interleaved)) % 188 == 0) // ~1 s
+                UpdateDumpHeader();
+        }
+
         // Called by SDL's audio thread whenever the device needs more data.
         void SDLCALL FeedDevice(void*, SDL_AudioStream* stream, int additionalAmount, int)
         {
-            constexpr int kFrameBytes = int(kFrameSampleCount * sizeof(float));
+            constexpr int kOutputBytes = int(kFrameChannelSamples * kOutputChannels * sizeof(float));
             float planar[kFrameSampleCount];
-            float interleaved[kFrameSampleCount];
+            float stereo[kFrameChannelSamples * kOutputChannels];
             while (additionalAmount > 0)
             {
                 if (PopFrame(planar))
                 {
                     s_gameAudioStarted = true;
-                    for (uint32_t s = 0; s < kFrameChannelSamples; s++)
-                    {
-                        for (uint32_t c = 0; c < kFrameChannels; c++)
-                            interleaved[s * kFrameChannels + c] = planar[c * kFrameChannelSamples + s];
-                    }
+                    FoldToStereo(planar, stereo);
                 }
                 else
                 {
                     // The game hasn't produced audio in time (or isn't running audio yet).
-                    memset(interleaved, 0, sizeof(interleaved));
+                    memset(planar, 0, sizeof(planar));
+                    memset(stereo, 0, sizeof(stereo));
                     if (s_gameAudioStarted)
                     {
                         const uint64_t underruns = ++s_underruns;
@@ -61,15 +101,10 @@ namespace sod::apu
                             LOGW("Audio output: game audio is not keeping up ({} underruns so far)", underruns);
                     }
                 }
-                SDL_PutAudioStreamData(stream, interleaved, kFrameBytes);
+                SDL_PutAudioStreamData(stream, stereo, kOutputBytes);
                 if (s_dump)
-                {
-                    fwrite(interleaved, kFrameBytes, 1, s_dump);
-                    s_dumpBytes += kFrameBytes;
-                    if ((s_dumpBytes / kFrameBytes) % 188 == 0) // ~1 s
-                        UpdateDumpHeader();
-                }
-                additionalAmount -= kFrameBytes;
+                    DumpFrame(planar);
+                additionalAmount -= kOutputBytes;
             }
         }
     }
@@ -81,7 +116,7 @@ namespace sod::apu
             LOGW("Audio output: SDL audio init failed: {}", SDL_GetError());
             return false;
         }
-        const SDL_AudioSpec spec{ SDL_AUDIO_F32, int(kFrameChannels), 48000 };
+        const SDL_AudioSpec spec{ SDL_AUDIO_F32, int(kOutputChannels), 48000 };
         s_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, FeedDevice, nullptr);
         if (!s_stream)
         {
@@ -95,7 +130,7 @@ namespace sod::apu
                 UpdateDumpHeader();
         }
         SDL_ResumeAudioStreamDevice(s_stream);
-        LOGI("Audio output: {} via SDL {}", SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "?",
+        LOGI("Audio output: {} via SDL {}, 5.1 folded to stereo", SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "?",
             SDL_GetVersion());
         return true;
     }
