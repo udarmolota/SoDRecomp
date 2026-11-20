@@ -12,6 +12,14 @@ namespace sod::log
 
     void Init(const std::filesystem::path& path)
     {
+        // The last run's log stays as <name>.prev.log: a bug report sent after the game was
+        // started again still holds the run that went wrong (the launcher's report zips every
+        // *.log in userdata). Only one run back; no log yet is not an error.
+        std::error_code ec;
+        std::filesystem::path previous = path;
+        previous.replace_extension(".prev.log");
+        std::filesystem::rename(path, previous, ec);
+
         s_file = _wfopen(path.c_str(), L"w");
         // SOD_TRACE_AFTER=<seconds>: import tracing from that moment on (a whole run's trace
         // is too much on a phone, and shifts the timing it is meant to show).

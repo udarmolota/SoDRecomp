@@ -125,12 +125,17 @@ namespace sod::gpu
     // Xenia's whole log (renderer device checks, [nativo] reports, warnings) into
     // userdata/xenia.log as well. Some ROMs (realme/ColorOS seen) drop the info lines of
     // third-party apps from logcat, so a bug report from them had none of it; the report zips
-    // every *.log in userdata up to 4 MB. The file is truncated at each start and stops at
-    // kMaxBytes with one closing line: the start of the run (device checks) is what matters.
+    // every *.log in userdata up to 4 MB. The file starts anew at each start; the run before
+    // stays as xenia.prev.log (InitializeXeniaGraphics). Everything goes in up to kMaxBytes: the
+    // start of the run (device checks) is what matters there. Past that only warnings and
+    // errors, kMaxTailBytes more: the end of a long session is where a lost device or a crash
+    // is (seen 2026-11-20: 2.8 MB by minute 28, when the driver lost the device), and the two
+    // limits together stay under the report's 4 MB.
     class XeniaFileSink final : public xe::LogSink
     {
     public:
         static constexpr size_t kMaxBytes = 3u << 20;
+        static constexpr size_t kMaxTailBytes = 512u << 10;
 
         explicit XeniaFileSink(const std::filesystem::path& path) : m_file(std::fopen(path.c_str(), "w")) {}
         ~XeniaFileSink() override
@@ -143,32 +148,14 @@ namespace sod::gpu
             std::lock_guard lock(m_mutex);
             if (!m_file || m_full)
                 return;
+            // Xenia hands a line over in pieces (prefix, text, line end): whole lines are written.
             for (size_t i = 0; i < size && !m_full; ++i)
             {
-                if (m_at_line_start)
-                {
-                    // Wall-clock time per line, like logcat's, to line it up with the game's log.
-                    const auto now = std::chrono::system_clock::now();
-                    const std::time_t t = std::chrono::system_clock::to_time_t(now);
-                    const int ms = int(std::chrono::duration_cast<std::chrono::milliseconds>(
-                                           now.time_since_epoch()).count() % 1000);
-                    std::tm tm{};
-                    localtime_r(&t, &tm);
-                    m_written += size_t(std::fprintf(m_file, "%02d:%02d:%02d.%03d ", tm.tm_hour, tm.tm_min,
-                                                     tm.tm_sec, ms));
-                    m_at_line_start = false;
-                }
-                std::fputc(buf[i], m_file);
-                ++m_written;
+                m_line.push_back(buf[i]);
                 if (buf[i] == '\n')
                 {
-                    m_at_line_start = true;
-                    if (m_written >= kMaxBytes)
-                    {
-                        std::fputs("(xenia.log stops here: 3 MB reached)\n", m_file);
-                        std::fflush(m_file);
-                        m_full = true;
-                    }
+                    WriteLine();
+                    m_line.clear();
                 }
             }
         }
@@ -180,10 +167,47 @@ namespace sod::gpu
         }
 
     private:
+        void WriteLine()
+        {
+            // "w> 0000216B text" starts a message and tells its level: 'w' a warning, '!' an
+            // error, 'x' a fatal one. A line without such a prefix carries on the message before
+            // it (the driver's "submit failed" warning ends in a second line with the VkResult).
+            if (m_line.size() >= 3 && m_line[1] == '>' && m_line[2] == ' ')
+                m_important = m_line[0] == 'w' || m_line[0] == '!' || m_line[0] == 'x';
+            if (m_tail && !m_important)
+                return;
+
+            // Wall-clock time per line, like logcat's, to line it up with the game's log.
+            const auto now = std::chrono::system_clock::now();
+            const std::time_t t = std::chrono::system_clock::to_time_t(now);
+            const int ms = int(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   now.time_since_epoch()).count() % 1000);
+            std::tm tm{};
+            localtime_r(&t, &tm);
+            m_written += size_t(std::fprintf(m_file, "%02d:%02d:%02d.%03d ", tm.tm_hour, tm.tm_min,
+                                             tm.tm_sec, ms));
+            m_written += std::fwrite(m_line.data(), 1, m_line.size(), m_file);
+
+            if (!m_tail && m_written >= kMaxBytes)
+            {
+                std::fputs("(xenia.log: 3 MB reached, only warnings and errors from here)\n", m_file);
+                std::fflush(m_file);
+                m_tail = true;
+            }
+            else if (m_tail && m_written >= kMaxBytes + kMaxTailBytes)
+            {
+                std::fputs("(xenia.log stops here)\n", m_file);
+                std::fflush(m_file);
+                m_full = true;
+            }
+        }
+
         std::mutex m_mutex;
         std::FILE* m_file;
+        std::string m_line;
         size_t m_written = 0;
-        bool m_at_line_start = true;
+        bool m_important = false;
+        bool m_tail = false;
         bool m_full = false;
     };
 
@@ -193,6 +217,11 @@ namespace sod::gpu
         // userdata/xenia.log as well (XeniaFileSink), so a bug report has it even where the
         // ROM filters logcat.
         xe::InitializeLogging("sod-xenia");
+        {
+            // The run before stays as xenia.prev.log, like sod.prev.log (sod::log::Init).
+            std::error_code ec;
+            std::filesystem::rename(userRoot / "xenia.log", userRoot / "xenia.prev.log", ec);
+        }
         xe::AddLogSink(std::make_unique<XeniaFileSink>(userRoot / "xenia.log"));
         // DAO_GPU_STATS' reports into sod.log, next to the game's own.
         xe::gpu::vulkan::dao_stats::SetSink([](const char* line) { LOGI("{}", line); });
