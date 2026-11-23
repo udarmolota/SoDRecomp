@@ -107,31 +107,59 @@ namespace sod::apu
                 additionalAmount -= kOutputBytes;
             }
         }
+
+        bool OpenStream()
+        {
+            const SDL_AudioSpec spec{ SDL_AUDIO_F32, int(kOutputChannels), 48000 };
+            SDL_AudioStream* stream =
+                SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, FeedDevice, nullptr);
+            if (!stream)
+                return false;
+            if (const char* dump = getenv("SOD_AUDIO_DUMP"))
+            {
+                s_dump = fopen(dump, "wb");
+                if (s_dump)
+                    UpdateDumpHeader();
+            }
+            s_stream = stream;
+            SDL_ResumeAudioStreamDevice(s_stream);
+            LOGI("Audio output: {} via SDL {}, 5.1 folded to stereo", SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "?",
+                SDL_GetVersion());
+            return true;
+        }
     }
 
     bool InitializeAudioOutput()
     {
+#if defined(__ANDROID__)
+        // AAudio's low-latency mode hands out an exclusive (MMAP) stream that Android may refuse or
+        // take back at startup ("AAUDIO_ERROR_DISCONNECTED", "stream was probably stolen": a Dragon
+        // Age player's Galaxy S23 Ultra started silent until a relaunch, same code). The game buffers
+        // audio anyway, so the shared stream's few extra milliseconds don't matter.
+        SDL_SetHint(SDL_HINT_ANDROID_LOW_LATENCY_AUDIO, "0");
+#endif
         if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
         {
             LOGW("Audio output: SDL audio init failed: {}", SDL_GetError());
             return false;
         }
-        const SDL_AudioSpec spec{ SDL_AUDIO_F32, int(kOutputChannels), 48000 };
-        s_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, FeedDevice, nullptr);
-        if (!s_stream)
-        {
-            LOGW("Audio output: can't open the playback device: {}", SDL_GetError());
-            return false;
-        }
-        if (const char* dump = getenv("SOD_AUDIO_DUMP"))
-        {
-            s_dump = fopen(dump, "wb");
-            if (s_dump)
-                UpdateDumpHeader();
-        }
-        SDL_ResumeAudioStreamDevice(s_stream);
-        LOGI("Audio output: {} via SDL {}, 5.1 folded to stereo", SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "?",
-            SDL_GetVersion());
-        return true;
+        if (OpenStream())
+            return true;
+        LOGW("Audio output: can't open the playback device: {}; retrying in the background", SDL_GetError());
+        // The device can be busy for a moment (another app's sound, a Bluetooth switch): keep trying
+        // once a second for a minute instead of leaving the whole session silent.
+        std::thread([] {
+            for (int attempt = 1; attempt <= 60; attempt++)
+            {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                if (OpenStream())
+                {
+                    LOGI("Audio output: playback device opened on retry {}", attempt);
+                    return;
+                }
+            }
+            LOGW("Audio output: gave up opening the playback device: {}", SDL_GetError());
+        }).detach();
+        return false;
     }
 }
